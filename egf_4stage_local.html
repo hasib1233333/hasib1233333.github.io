@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>EGF-MAT 4-Stage Skeleton (Local Thinning)</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:system-ui,sans-serif;padding:10px;background:#f5f5f3;overflow-x:hidden}
+.toolbar{display:flex;gap:4px;flex-wrap:wrap;align-items:center;margin-bottom:8px;padding:7px 10px;background:#e8e8e6;border-radius:8px}
+button{font-size:11px;padding:3px 9px;border:1px solid #bbb;border-radius:5px;background:#fff;cursor:pointer;white-space:nowrap}
+button:hover{background:#e0e0e0}
+button.on{background:#1a1a1a;color:#fff;border-color:#1a1a1a}
+.stage-bar{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-bottom:8px}
+.sbtn{padding:6px 8px;border:1.5px solid #ccc;border-radius:7px;background:#fff;cursor:pointer;text-align:left}
+.sbtn:hover{background:#f5f5f3}
+.sbtn .snum{font-size:11px;font-weight:700;display:block;margin-bottom:2px}
+.sbtn .slbl{font-size:9px;color:#888;display:block;line-height:1.4}
+.sbtn.s1.active{border-color:#4ade80;background:#f0fdf4}.sbtn.s1.active .snum{color:#14532d}.sbtn.s1.active .slbl{color:#22c55e}
+.sbtn.s2.active{border-color:#22c55e;background:#dcfce7}.sbtn.s2.active .snum{color:#14532d}.sbtn.s2.active .slbl{color:#16a34a}
+.sbtn.s3.active{border-color:#10b981;background:#d1fae5}.sbtn.s3.active .snum{color:#064e3b}.sbtn.s3.active .slbl{color:#059669}
+.sbtn.s4.active{border-color:#059669;background:#bbf7d0}.sbtn.s4.active .snum{color:#064e3b}.sbtn.s4.active .slbl{color:#047857}
+#cv-wrap{overflow:auto;border-radius:8px;border:2px solid #555;display:inline-block;max-width:100%;width:100%;position:relative}
+#cv{display:block;image-rendering:pixelated;cursor:crosshair;max-width:100%;height:auto}
+.wrow{display:flex;gap:6px;align-items:center;margin-top:7px;flex-wrap:wrap}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;margin-top:7px}
+.sc{border-radius:5px;padding:4px 7px}.sc .v{font-size:13px;font-weight:600}.sc .l{font-size:9px;color:#555}
+.legend{display:flex;gap:7px;flex-wrap:wrap;margin-top:6px;font-size:10px;color:#555}
+.li{display:flex;align-items:center;gap:4px}
+.ls{width:12px;height:12px;border-radius:2px;border:1px solid rgba(0,0,0,0.15);flex-shrink:0}
+#insp{margin-top:6px;padding:5px 10px;background:#fff;border:1px solid #ddd;border-radius:6px;font-size:11px;color:#555;min-height:22px}
+.info-box{margin-top:8px;padding:8px 12px;background:#fff;border:1px solid #ddd;border-radius:8px;font-size:11px;line-height:1.7}
+.info-box h4{font-size:12px;font-weight:600;margin-bottom:4px}
+.rule{margin:2px 0;padding:3px 8px;border-radius:4px}
+
+/* ── MOBILE RESPONSIVE ── */
+@media(max-width:768px){
+  body{padding:8px}
+  .toolbar{padding:6px 8px;gap:3px;margin-bottom:6px}
+  button{font-size:10px;padding:2px 6px}
+  .stage-bar{grid-template-columns:repeat(2,1fr);gap:4px;margin-bottom:6px}
+  .sbtn{padding:5px 6px}
+  .sbtn .snum{font-size:10px;margin-bottom:1px}
+  .sbtn .slbl{font-size:8px;line-height:1.3}
+  .wrow{gap:4px;margin-top:5px;font-size:10px}
+  .stats{grid-template-columns:repeat(3,1fr);gap:3px;margin-top:5px}
+  .sc{padding:3px 5px}
+  .sc .v{font-size:12px}
+  .sc .l{font-size:8px}
+  .legend{gap:5px;margin-top:5px;font-size:9px}
+  #insp{margin-top:5px;padding:4px 8px;font-size:10px}
+  .info-box{margin-top:6px;padding:6px 10px;font-size:10px}
+}
+
+@media(max-width:480px){
+  body{padding:6px}
+  .toolbar{padding:5px 6px;gap:2px;margin-bottom:5px;flex-wrap:wrap}
+  button{font-size:9px;padding:2px 5px}
+  .stage-bar{grid-template-columns:repeat(2,1fr);gap:3px;margin-bottom:5px}
+  .sbtn{padding:4px 5px}
+  .sbtn .snum{font-size:9px;margin-bottom:1px}
+  .sbtn .slbl{font-size:7px;line-height:1.2}
+  .wrow{gap:3px;margin-top:4px;font-size:9px;flex-wrap:wrap}
+  .wrow input{max-width:100px !important}
+  .stats{grid-template-columns:repeat(2,1fr);gap:3px;margin-top:4px}
+  .sc{padding:2px 4px}
+  .sc .v{font-size:11px}
+  .sc .l{font-size:7px}
+  .legend{gap:4px;margin-top:4px;font-size:8px;flex-wrap:wrap}
+  .li{gap:3px}
+  .ls{width:10px;height:10px}
+  #insp{margin-top:4px;padding:3px 6px;font-size:9px}
+  .info-box{margin-top:5px;padding:5px 8px;font-size:9px;line-height:1.5}
+}
+</style>
+</head>
+<body>
+
+<div class="toolbar">
+  <b style="font-size:12px;margin-right:2px">Grid:</b>
+  <button onclick="setN(16)" id="gn16" class="on">16</button>
+  <button onclick="setN(20)" id="gn20">20</button>
+  <button onclick="setN(30)" id="gn30">30</button>
+  <button onclick="setN(40)" id="gn40">40</button>
+  <button onclick="setN(50)" id="gn50">50</button>
+  &nbsp;
+  <button onclick="setTool('obs')" id="tobs" class="on">&#9632; Obstacle</button>
+  <button onclick="setTool('erase')" id="terase">&#10005; Erase</button>
+  &nbsp;
+  <button onclick="reset()" style="background:#1a1a1a;color:#fff">Reset</button>
+  <button onclick="clearAll()">Clear</button>
+  <button onclick="addRand()">+ Obstacle</button>
+  <button onclick="toggleNums()" id="bnums" class="on">Nums: ON</button>
+  <button onclick="autoRun()" style="background:#064e3b;color:#fff;font-weight:600">&#9654;&#9654; Run All 4</button>
+</div>
+
+<div class="stage-bar">
+  <button class="sbtn s1 active" id="stg1" onclick="showStage(1)">
+    <span class="snum">① Wave Propagation</span>
+    <span class="slbl">8-BFS distance field<br>Source ID per obstacle</span>
+  </button>
+  <button class="sbtn s2" id="stg2" onclick="showStage(2)">
+    <span class="snum">② Fat Skeleton</span>
+    <span class="slbl">4-Flag method<br>Ridge + different sources</span>
+  </button>
+  <button class="sbtn s3" id="stg3" onclick="showStage(3)">
+    <span class="snum">③ 1-Pixel Skeleton</span>
+    <span class="slbl">Pattern LUT thinning<br>+ diagonal pass-through</span>
+  </button>
+  <button class="sbtn s4" id="stg4" onclick="showStage(4)">
+    <span class="snum">④ Local Thinning</span>
+    <span class="slbl">Directional + Subfield<br>True 1-pixel skeleton</span>
+  </button>
+</div>
+
+<div id="cv-wrap"><canvas id="cv"></canvas></div>
+
+<div class="wrow">
+  <label style="font-size:11px">Wave:</label>
+  <input type="range" id="wsl" min="0" max="100" value="100" step="1"
+    style="flex:1;max-width:280px" oninput="setW(+this.value)">
+  <span id="wlbl" style="font-size:11px;font-weight:600;min-width:48px">full</span>
+  <button onclick="runStage1();showStage(1)">① Run</button>
+  <button onclick="runStage2();showStage(2)">② Run</button>
+  <button onclick="runStage3();showStage(3)">③ Run</button>
+  <button onclick="runStage4();showStage(4)">④ Run</button>
+</div>
+
+<div class="stats">
+  <div class="sc" style="background:#dcfce7"><div class="v" id="s1">-</div><div class="l">Free cells</div></div>
+  <div class="sc" style="background:#fee2e2"><div class="v" id="s2">-</div><div class="l">Obstacles</div></div>
+  <div class="sc" style="background:#dcfce7"><div class="v" id="s3">-</div><div class="l">② Fat skel</div></div>
+  <div class="sc" style="background:#d1fae5"><div class="v" id="s4">-</div><div class="l">③ 1-px skel</div></div>
+  <div class="sc" style="background:#bbf7d0"><div class="v" id="s7">-</div><div class="l">④ Local Thinning</div></div>
+  <div class="sc" style="background:#f0f0ee"><div class="v" id="s5">-</div><div class="l">Max dist</div></div>
+</div>
+
+<div class="legend">
+  <span class="li"><span class="ls" style="background:#111"></span>Obstacle</span>
+  <span class="li"><span class="ls" style="background:#f0f0ee;border-color:#ccc"></span>Boundary</span>
+  <span class="li"><span class="ls" style="background:#fff;border-color:#ccc"></span>Free</span>
+  <span class="li"><span class="ls" style="background:rgba(74,222,128,0.40)"></span>① Wavefront</span>
+  <span class="li"><span class="ls" style="background:rgba(74,222,128,0.55)"></span>② Fat skeleton</span>
+  <span class="li"><span class="ls" style="background:rgba(5,150,105,0.55)"></span>③ 1-px skeleton</span>
+  <span class="li"><span class="ls" style="background:rgba(21,128,61,0.50)"></span>④ Local Thinning</span>
+</div>
+<div id="insp">Hover any cell to inspect.</div>
+<div class="info-box" id="stage-info">
+  <h4 style="color:#14532d">① Wave Propagation</h4>
+  <div class="rule" style="background:#dcfce7;color:#14532d;border-left:3px solid #4ade80">8-BFS from all obstacles + boundary simultaneously. Direct=+1, Diagonal=+2. Each obstacle gets unique source ID.</div>
+</div>
+
+<script>
+const cv=document.getElementById('cv'),ctx=cv.getContext('2d');
+let N=16,T=N+2,SZ=34;
+let G=[],D=[],SRC=[],FAT=[],THIN=[],LOCAL=[];
+let wStep=100,stage=1,tool='obs',showNums=true,painting=false,paintVal=1;
+let ran1=false,ran2=false,ran3=false,ran4=false;
+
+/* ══════════════════════════════════════════════════════════════════
+   Precomputed Pattern LUT
+══════════════════════════════════════════════════════════════════ */
+function buildLUT(){
+  const lutA=new Uint8Array(256),lutB=new Uint8Array(256);
+  for(let mask=0;mask<256;mask++){
+    const p=[0,1,2,3,4,5,6,7].map(i=>(mask>>i)&1);
+    const nb=p.reduce((a,v)=>a+v,0);
+    let cn=0; for(let i=0;i<8;i++) if(!p[i]&&p[(i+1)%8])cn++;
+    const pN=p[0],pNE=p[1],pE=p[2],pSE=p[3],pS=p[4],pSW=p[5],pW=p[6],pNW=p[7];
+    if(nb>=2&&nb<=6&&cn===1){
+      if(pW*pE*pS===0&&pN*pE*pS===0) lutA[mask]=1;
+      if(pN*pW*pS===0&&pN*pW*pE===0) lutB[mask]=1;
+    }
+  }
+  return{lutA,lutB};
+}
+const {lutA,lutB}=buildLUT();
+
+/* ══════════════════════════════════════════════════════════════════
+   Local Thinning Logic
+══════════════════════════════════════════════════════════════════ */
+function getConnectivity(mask){
+  const pN =(mask>>0)&1, pNE=(mask>>1)&1, pE =(mask>>2)&1, pSE=(mask>>3)&1;
+  const pS =(mask>>4)&1, pSW=(mask>>5)&1, pW =(mask>>6)&1, pNW=(mask>>7)&1;
+  let c = 0;
+  if (!pN && (pNE || pE)) c++;
+  if (!pE && (pSE || pS)) c++;
+  if (!pS && (pSW || pW)) c++;
+  if (!pW && (pNW || pN)) c++;
+  return c;
+}
+
+function init(){
+  T=N+2;
+  // Calculate available width considering padding and viewport
+  const availWidth=Math.min(window.innerWidth-30,700);
+  SZ=Math.min(38,Math.max(8,Math.floor(availWidth/T)));
+  G=[];D=[];SRC=[];FAT=[];THIN=[];LOCAL=[];
+  for(let i=0;i<T;i++){
+    G.push(new Uint8Array(T));D.push(new Float32Array(T).fill(-1));
+    SRC.push(new Int32Array(T).fill(-1));FAT.push(new Uint8Array(T));THIN.push(new Uint8Array(T));
+    LOCAL.push(new Uint8Array(T));
+  }
+  cv.width=T*SZ;cv.height=T*SZ;ran1=ran2=ran3=ran4=false;
+}
+const isBnd=(r,c)=>r===0||r===T-1||c===0||c===T-1;
+const isCorn=(r,c)=>(r===0||r===T-1)&&(c===0||c===T-1);
+
+/* ══ STAGE 1: Wave Propagation ══ */
+function runStage1(){
+  const OL=new Int32Array(T*T).fill(-1);let nxt=0;
+  for(let r=0;r<T;r++)for(let c=0;c<T;c++){
+    if(G[r][c]&&OL[r*T+c]<0){
+      const id=nxt++,q=[r*T+c];OL[r*T+c]=id;let h=0;
+      while(h<q.length){const idx=q[h++],rr=idx/T|0,cc=idx%T;
+        for(const[dr,dc]of[[-1,0],[1,0],[0,-1],[0,1]]){const nr=rr+dr,nc=cc+dc;
+          if(nr>=0&&nr<T&&nc>=0&&nc<T&&G[nr][nc]&&OL[nr*T+nc]<0){OL[nr*T+nc]=id;q.push(nr*T+nc);}}}
+    }
+  }
+  const TOP=nxt++,BOT=nxt++,LEF=nxt++,RIG=nxt++;
+  for(let r=0;r<T;r++)for(let c=0;c<T;c++){D[r][c]=-1;SRC[r][c]=-1;}
+  const maxB=T*8,bk=[];for(let i=0;i<maxB;i++)bk.push([]);
+  const seed=(r,c,s)=>{D[r][c]=0;SRC[r][c]=s;bk[0].push(r*T+c);};
+  for(let r=0;r<T;r++)for(let c=0;c<T;c++) if(G[r][c])seed(r,c,OL[r*T+c]);
+  for(let c=0;c<T;c++){seed(0,c,TOP);seed(T-1,c,BOT);}
+  for(let r=1;r<T-1;r++){seed(r,0,LEF);seed(r,T-1,RIG);}
+  const dr4=[-1,1,0,0],dc4=[0,0,-1,1],drd=[-1,-1,1,1],dcd=[-1,1,-1,1];
+  for(let d=0;d<maxB;d++){
+    const b=bk[d];
+    for(let bi=0;bi<b.length;bi++){
+      const idx=b[bi],r=idx/T|0,c=idx%T;if(D[r][c]!==d)continue;const s=SRC[r][c];
+      for(let i=0;i<4;i++){const nr=r+dr4[i],nc=c+dc4[i];if(nr>=0&&nr<T&&nc>=0&&nc<T&&!G[nr][nc]&&!isBnd(nr,nc)){const nd=d+1;if(D[nr][nc]<0||nd<D[nr][nc]){D[nr][nc]=nd;SRC[nr][nc]=s;if(nd<maxB)bk[nd].push(nr*T+nc);}}}
+      for(let i=0;i<4;i++){const nr=r+drd[i],nc=c+dcd[i];if(nr>=0&&nr<T&&nc>=0&&nc<T&&!G[nr][nc]&&!isBnd(nr,nc)){const nd=d+2;if(D[nr][nc]<0||nd<D[nr][nc]){D[nr][nc]=nd;SRC[nr][nc]=s;if(nd<maxB)bk[nd].push(nr*T+nc);}}}
+    }
+  }
+  ran1=true;updateStats();
+}
+
+/* ══ STAGE 2: Fat Skeleton ══ */
+function runStage2(){
+  if(!ran1)runStage1();
+  for(let r=0;r<T;r++)for(let c=0;c<T;c++)FAT[r][c]=0;
+  const gd=(rr,cc)=>(rr<0||rr>=T||cc<0||cc>=T||G[rr][cc]||isBnd(rr,cc))?0:(D[rr][cc]<0?0:D[rr][cc]);
+  const gs=(rr,cc)=>(rr<0||rr>=T||cc<0||cc>=T)?-2:SRC[rr][cc];
+  const ridge=(d,a,b)=>d>Math.min(a,b)&&d>=Math.max(a,b);
+  const diff=(a,b)=>a>=0&&b>=0&&a!==b;
+  for(let r=1;r<T-1;r++)for(let c=1;c<T-1;c++){
+    if(G[r][c]||isBnd(r,c))continue;const d=D[r][c];if(d<=0)continue;
+    const dn=gd(r-1,c),ds=gd(r+1,c),de=gd(r,c+1),dw=gd(r,c-1);
+    const sN=gs(r-1,c),sS=gs(r+1,c),sE=gs(r,c+1),sW=gs(r,c-1);
+    if((ridge(d,dn,ds)&&diff(sN,sS))||(ridge(d,de,dw)&&diff(sE,sW)))FAT[r][c]=1;
+  }
+  ran2=true;updateStats();
+}
+
+/* ══ STAGE 3: 1-Pixel Skeleton ══ */
+function getRingMask(r,c,M){
+  const dr=[-1,-1, 0, 1, 1, 1, 0,-1], dc=[ 0, 1, 1, 1, 0,-1,-1,-1];
+  let mask=0;
+  for(let i=0;i<8;i++){
+    const nr=r+dr[i],nc=c+dc[i];
+    if(nr>=0&&nr<T&&nc>=0&&nc<T&&M[nr][nc])mask|=(1<<i);
+  }
+  return mask;
+}
+function getNb8(r,c,M){
+  const dr=[-1,-1,-1,0,0,1,1,1],dc=[-1,0,1,-1,1,-1,0,1];
+  let n=0;for(let i=0;i<8;i++){const nr=r+dr[i],nc=c+dc[i];if(nr>=0&&nr<T&&nc>=0&&nc<T&&M[nr][nc])n++;}
+  return n;
+}
+function countComp(M){
+  const vis=Array.from({length:T},()=>new Uint8Array(T));let n=0;
+  const dr8=[-1,-1,-1,0,0,1,1,1],dc8=[-1,0,1,-1,1,-1,0,1];
+  for(let r=0;r<T;r++)for(let c=0;c<T;c++){
+    if(!M[r][c]||vis[r][c])continue;n++;
+    const stk=[[r,c]];vis[r][c]=1;let h=0;
+    while(h<stk.length){const[cr,cc]=stk[h++];
+      for(let d=0;d<8;d++){const nr=cr+dr8[d],nc=cc+dc8[d];if(nr>=0&&nr<T&&nc>=0&&nc<T&&M[nr][nc]&&!vis[nr][nc]){vis[nr][nc]=1;stk.push([nr,nc]);}}}
+  }
+  return n;
+}
+
+function runStage3(){
+  if(!ran2)runStage2();
+  for(let r=0;r<T;r++)for(let c=0;c<T;c++)THIN[r][c]=FAT[r][c];
+  let changed=true,passes=0;
+  while(changed&&passes<300){
+    changed=false;passes++;
+    const remA=[];
+    for(let r=1;r<T-1;r++)for(let c=1;c<T-1;c++){
+      if(!THIN[r][c])continue;
+      if(lutA[getRingMask(r,c,THIN)])remA.push([r,c]);
+    }
+    for(const[r,c]of remA){THIN[r][c]=0;changed=true;}
+    const remB=[];
+    for(let r=1;r<T-1;r++)for(let c=1;c<T-1;c++){
+      if(!THIN[r][c])continue;
+      if(lutB[getRingMask(r,c,THIN)])remB.push([r,c]);
+    }
+    for(const[r,c]of remB){THIN[r][c]=0;changed=true;}
+  }
+  const fc=countComp(FAT);
+  const cands=[];
+  for(let r=1;r<T-1;r++)for(let c=1;c<T-1;c++) if(FAT[r][c]&&!THIN[r][c])cands.push([r,c,D[r][c]]);
+  cands.sort((a,b)=>b[2]-a[2]);
+  for(const[r,c]of cands){if(countComp(THIN)<=fc)break;THIN[r][c]=1;}
+  const DR8=[-1,-1,-1,0,0,1,1,1],DC8=[-1,0,1,-1,1,-1,0,1];
+  let dChanged=true,dPasses=0;
+  while(dChanged&&dPasses<200){
+    dChanged=false;dPasses++;
+    for(let r=1;r<T-1;r++)for(let c=1;c<T-1;c++){
+      if(!THIN[r][c])continue;
+      const nbs=[];
+      for(let i=0;i<8;i++){const nr=r+DR8[i],nc=c+DC8[i];if(nr>=0&&nr<T&&nc>=0&&nc<T&&THIN[nr][nc])nbs.push([nr,nc]);}
+      if(nbs.length!==2)continue;
+      const[r1,c1]=nbs[0],[r2,c2]=nbs[1];
+      if(Math.abs(r1-r2)===1&&Math.abs(c1-c2)===1){THIN[r][c]=0;dChanged=true;}
+    }
+  }
+  ran3=true;updateStats();
+}
+
+/* ══ STAGE 4: Local Thinning ══ */
+function runStage4(){
+  if(!ran3)runStage3();
+  for(let r=0;r<T;r++)for(let c=0;c<T;c++)LOCAL[r][c]=THIN[r][c];
+  let changed=true,passes=0;
+  while(changed&&passes<300){
+    changed=false;passes++;
+    const toRem=[];
+    for(let r=1;r<T-1;r++)for(let c=1;c<T-1;c++){
+      if(!LOCAL[r][c] || (r+c)%2 !== 0)continue;
+      const mask=getRingMask(r,c,LOCAL);
+      const p=[0,1,2,3,4,5,6,7].map(i=>(mask>>i)&1);
+      const pN=p[0],pE=p[2],pS=p[4],pW=p[6];
+      const B=p.reduce((a,v)=>a+v,0);
+      if(B>=2 && B<=7 && getConnectivity(mask)===1 && pN*pE*pS===0 && pE*pS*pW===0) toRem.push([r,c]);
+    }
+    for(const[r,c]of toRem){LOCAL[r][c]=0;changed=true;}
+    toRem.length=0;
+    for(let r=1;r<T-1;r++)for(let c=1;c<T-1;c++){
+      if(!LOCAL[r][c] || (r+c)%2 !== 1)continue;
+      const mask=getRingMask(r,c,LOCAL);
+      const p=[0,1,2,3,4,5,6,7].map(i=>(mask>>i)&1);
+      const pN=p[0],pE=p[2],pS=p[4],pW=p[6];
+      const B=p.reduce((a,v)=>a+v,0);
+      if(B>=2 && B<=7 && getConnectivity(mask)===1 && pN*pE*pW===0 && pN*pS*pW===0) toRem.push([r,c]);
+    }
+    for(const[r,c]of toRem){LOCAL[r][c]=0;changed=true;}
+  }
+  ran4=true;updateStats();
+}
+
+/* ══ STATS & RENDER ══ */
+function maxD(){let m=0;for(let r=0;r<T;r++)for(let c=0;c<T;c++) if(!G[r][c]&&!isBnd(r,c)&&D[r][c]>m)m=D[r][c];return m;}
+function updateStats(){
+  let f=0,o=0,fat=0,thin=0,local=0,mx=0;
+  for(let r=0;r<T;r++)for(let c=0;c<T;c++){
+    if(isBnd(r,c))continue;if(G[r][c])o++;else{f++;if(D[r][c]>mx)mx=D[r][c];}
+    if(FAT[r][c])fat++;if(THIN[r][c])thin++;if(LOCAL[r][c])local++;
+  }
+  document.getElementById('s1').textContent=f;document.getElementById('s2').textContent=o;
+  document.getElementById('s3').textContent=fat;document.getElementById('s4').textContent=thin;
+  document.getElementById('s7').textContent=local;
+  document.getElementById('s5').textContent=Math.round(mx);
+}
+
+function render(){
+  const mx=maxD(),showUpTo=Math.round(wStep/100*mx),fs=Math.max(7,Math.min(SZ*0.35|0,13));
+  ctx.fillStyle='#f0f0ec';ctx.fillRect(0,0,cv.width,cv.height);
+  for(let r=0;r<T;r++){
+    for(let c=0;c<T;c++){
+      const x=c*SZ,y=r*SZ;
+      if(isCorn(r,c)){ctx.fillStyle='#e8e8e6';ctx.fillRect(x,y,SZ,SZ);ctx.strokeStyle='#d0d0d0';ctx.lineWidth=0.4;ctx.strokeRect(x,y,SZ,SZ);continue;}
+      if(isBnd(r,c)){
+        ctx.fillStyle='#f0f0ee';ctx.fillRect(x,y,SZ,SZ);
+        if(showNums){ctx.fillStyle='#888';ctx.font=`bold ${fs}px monospace`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('0',x+SZ/2,y+SZ/2);}
+        ctx.strokeStyle='#ccc';ctx.lineWidth=0.5;ctx.strokeRect(x,y,SZ,SZ);continue;
+      }
+      if(G[r][c]){
+        ctx.fillStyle='#111';ctx.fillRect(x,y,SZ,SZ);
+        ctx.save();ctx.beginPath();ctx.rect(x+1,y+1,SZ-2,SZ-2);ctx.clip();
+        ctx.strokeStyle='rgba(255,255,255,0.08)';ctx.lineWidth=0.9;
+        for(let k=-SZ;k<SZ*2;k+=6){ctx.beginPath();ctx.moveTo(x+k,y);ctx.lineTo(x+k+SZ,y+SZ);ctx.stroke();ctx.beginPath();ctx.moveTo(x+k+SZ,y);ctx.lineTo(x+k,y+SZ);ctx.stroke();}
+        ctx.restore();ctx.strokeStyle='rgba(255,255,255,0.12)';ctx.lineWidth=0.8;ctx.strokeRect(x+1,y+1,SZ-2,SZ-2);
+        ctx.strokeStyle='#000';ctx.lineWidth=1;ctx.strokeRect(x+0.5,y+0.5,SZ-1,SZ-1);
+        if(showNums){ctx.fillStyle='rgba(255,255,255,0.7)';ctx.font=`bold ${fs}px monospace`;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText('0',x+SZ/2,y+SZ/2);}
+        continue;
+      }
+      const d=D[r][c],reached=d>=0&&d<=showUpTo,isFront=d===showUpTo&&wStep<100&&d>=0;
+      const fat=FAT[r][c],thin=THIN[r][c],local=LOCAL[r][c];
+      ctx.fillStyle='#ffffff';ctx.fillRect(x,y,SZ,SZ);
+      let ov=null;
+      if(stage===1&&isFront)ov='rgba(74,222,128,0.40)';
+      else if(stage===2&&fat)ov='rgba(74,222,128,0.55)';
+      else if(stage===3&&thin)ov='rgba(5,150,105,0.52)';
+      else if(stage===4&&local)ov='rgba(21,128,61,0.45)';
+      if(ov){ctx.fillStyle=ov;ctx.fillRect(x,y,SZ,SZ);}
+      ctx.strokeStyle='rgba(180,185,195,0.40)';ctx.lineWidth=0.5;ctx.strokeRect(x+0.5,y+0.5,SZ-1,SZ-1);
+      if(showNums&&reached&&d>=0){
+        ctx.fillStyle='#111111';ctx.font=`bold ${fs}px monospace`;
+        ctx.textAlign='center';ctx.textBaseline='middle';
+        ctx.strokeStyle='rgba(255,255,255,0.7)';ctx.lineWidth=2;ctx.lineJoin='round';
+        ctx.strokeText(Math.round(d),x+SZ/2,y+SZ/2);
+        ctx.fillText(Math.round(d),x+SZ/2,y+SZ/2);
+      }
+    }
+  }
+  const skelData=(stage===3&&ran3)?THIN:(stage===4&&ran4)?LOCAL:null;
+  if(skelData){
+    const seen=new Set();const nb8=[[-1,0],[1,0],[0,-1],[0,1],[-1,-1],[-1,1],[1,-1],[1,1]];
+    const clr=(stage===3)?'rgba(4,120,87,0.90)':'rgba(6,78,59,0.90)';
+    ctx.strokeStyle=clr;ctx.lineWidth=Math.max(1.5,SZ*0.12);ctx.lineCap='round';ctx.setLineDash([]);
+    for(let r=0;r<T;r++)for(let c=0;c<T;c++){
+      if(!skelData[r][c])continue;
+      nb8.forEach(([dr,dc])=>{const nr=r+dr,nc=c+dc;if(nr>=0&&nr<T&&nc>=0&&nc<T&&skelData[nr][nc]){
+        const k=Math.min(r*T+c,nr*T+nc)+'_'+Math.max(r*T+c,nr*T+nc);
+        if(!seen.has(k)){seen.add(k);ctx.beginPath();ctx.moveTo(c*SZ+SZ/2,r*SZ+SZ/2);ctx.lineTo(nc*SZ+SZ/2,nr*SZ+SZ/2);ctx.stroke();}}});
+    }
+    ctx.fillStyle=clr;
+    for(let r=0;r<T;r++)for(let c=0;c<T;c++){if(!skelData[r][c])continue;
+      ctx.beginPath();ctx.arc(c*SZ+SZ/2,r*SZ+SZ/2,Math.max(1.5,SZ*0.16),0,Math.PI*2);ctx.fill();}
+  }
+  ctx.strokeStyle='#2d2d2d';ctx.lineWidth=2.5;ctx.setLineDash([]);
+  const s=SZ;
+  ctx.beginPath();ctx.moveTo(s,s);ctx.lineTo(T*SZ-s,s);ctx.moveTo(s,(T-1)*SZ);ctx.lineTo(T*SZ-s,(T-1)*SZ);ctx.moveTo(s,s);ctx.lineTo(s,T*SZ-s);ctx.moveTo((T-1)*SZ,s);ctx.lineTo((T-1)*SZ,T*SZ-s);ctx.stroke();
+  ctx.strokeStyle='#555';ctx.lineWidth=2;ctx.strokeRect(1,1,cv.width-2,cv.height-2);
+}
+
+/* ══ STAGE INFO ══ */
+const INFO={
+  1:`<h4 style="color:#14532d">① Wave Propagation</h4>
+     <div class="rule" style="background:#dcfce7;color:#14532d;border-left:3px solid #4ade80">8-BFS from all obstacle + boundary simultaneously. Direct=+1, Diagonal=+2. Each obstacle → unique source ID.</div>`,
+  2:`<h4 style="color:#14532d">② Fat Skeleton</h4>
+     <div class="rule" style="background:#dcfce7;color:#14532d;border-left:3px solid #4ade80">NS flag: d(C)&gt;min(N,S) AND d(C)≥max(N,S) AND src(N)≠src(S)</div>
+     <div class="rule" style="background:#dcfce7;color:#14532d;border-left:3px solid #4ade80">EW flag: d(C)&gt;min(E,W) AND d(C)≥max(E,W) AND src(E)≠src(W)</div>`,
+  3:`<h4 style="color:#064e3b">③ 1-Pixel Skeleton</h4>
+     <div class="rule" style="background:#d1fae5;color:#064e3b;border-left:3px solid #10b981">Two-pass thinning with precomputed 256-entry LUT. Alternating until stable.</div>`,
+  4:`<h4 style="color:#064e3b">④ Local Thinning</h4>
+     <div class="rule" style="background:#bbf7d0;color:#064e3b;border-left:3px solid #10b981">Hybrid approach combining Directional and Subfield methods. Uses parity of (i+j) to partition pixels.</div>
+     <div class="rule" style="background:#bbf7d0;color:#064e3b;border-left:3px solid #10b981">Uses Connectivity Number C(P)=1 to ensure topology preservation.</div>
+     <div class="rule" style="background:#bbf7d0;color:#064e3b;border-left:3px solid #10b981">Result: Improved 1-pixel wide skeleton with better diagonal preservation and noise immunity.</div>`
+};
+
+function showStage(s){
+  stage=s;
+  for(let i=1;i<=4;i++){const el=document.getElementById('stg'+i);if(el)el.classList.toggle('active',i===s);}
+  document.getElementById('stage-info').innerHTML=INFO[s];render();
+}
+
+function updateInsp(r,c){
+  if(r<0||r>=T||c<0||c>=T)return;
+  if(G[r][c]){document.getElementById('insp').textContent=`(${r-1},${c-1}) Obstacle d=0`;return;}
+  if(isBnd(r,c)){document.getElementById('insp').textContent=`Boundary d=0`;return;}
+  const d=D[r][c],fat=FAT[r][c],thin=THIN[r][c],local=LOCAL[r][c];
+  const nb=thin?getNb8(r,c,THIN):0;
+  const mask=thin?getRingMask(r,c,THIN):0;
+  document.getElementById('insp').innerHTML=
+    `(${r-1},${c-1}) d=<b>${d>=0?Math.round(d):'-'}</b> src=${SRC[r]?.[c]??'-'} | fat=${fat} 1px=${thin} local=${local} | `+
+    `nb=${nb} mask=${mask} C(P)=${getConnectivity(mask)}`;
+}
+
+function setW(v){wStep=v;const mx=maxD(),cur=Math.round(v/100*mx);document.getElementById('wlbl').textContent=v>=100?'full':'d='+cur;render();}
+function setN(n){N=n;['gn16','gn20','gn30','gn40','gn50'].forEach(id=>document.getElementById(id).classList.remove('on'));document.getElementById('gn'+n).classList.add('on');reset();}
+function setTool(t){tool=t;['obs','erase'].forEach(id=>document.getElementById('t'+id).classList.toggle('on',id===t));}
+function toggleNums(){showNums=!showNums;document.getElementById('bnums').textContent='Nums: '+(showNums?'ON':'OFF');document.getElementById('bnums').classList.toggle('on',showNums);render();}
+function clearAll(){init();render();}
+function addRand(){const h=2+Math.floor(Math.random()*3),w=2+Math.floor(Math.random()*4);const r=2+Math.floor(Math.random()*(T-h-4)),c=2+Math.floor(Math.random()*(T-w-4));for(let rr=r;rr<r+h&&rr<T-1;rr++)for(let cc=c;cc<c+w&&cc<T-1;cc++)G[rr][cc]=1;ran1=ran2=ran3=false;render();}
+function autoRun(){runStage1();showStage(1);render();setTimeout(()=>{runStage2();showStage(2);render();},700);setTimeout(()=>{runStage3();showStage(3);render();},1400);setTimeout(()=>{runStage4();showStage(4);render();},2100);}
+function reset(){
+  init();
+  const ob=(r,c)=>{if(r>=1&&r<=N&&c>=1&&c<=N)G[r][c]=1;};
+  if(N>=16){for(let r=2;r<=9;r++)ob(r,3);ob(2,4);for(let c=3;c<=6;c++)ob(14,c);ob(15,3);for(let c=7;c<=11;c++)ob(8,c);for(let r=9;r<=13;r++)ob(r,9);ob(2,13);ob(2,14);ob(3,13);ob(3,14);ob(15,13);ob(15,14);ob(16,13);ob(16,14);}
+  else{ob(2,2);ob(2,3);ob(3,2);ob(N-2,N-2);ob(N-2,N-3);ob(N-3,N-2);}
+  wStep=100;document.getElementById('wsl').value=100;document.getElementById('wlbl').textContent='full';
+  showStage(1);render();
+}
+function getCR(e){const rect=cv.getBoundingClientRect(),scale=cv.width/rect.width;return[Math.floor((e.clientY-rect.top)*scale/SZ),Math.floor((e.clientX-rect.left)*scale/SZ)];}
+function applyTool(r,c){if(r<1||r>=T-1||c<1||c>=T-1||isBnd(r,c)||isCorn(r,c))return;G[r][c]=tool==='obs'?paintVal:0;ran1=ran2=ran3=ran4=false;render();}
+cv.addEventListener('mousedown',e=>{const[r,c]=getCR(e);painting=true;paintVal=tool==='obs'?(G[r][c]?0:1):0;applyTool(r,c);});
+cv.addEventListener('mousemove',e=>{const[r,c]=getCR(e);if(painting)applyTool(r,c);updateInsp(r,c);});
+cv.addEventListener('mouseup',()=>{painting=false;});
+document.addEventListener('mouseup',()=>{painting=false;});
+cv.addEventListener('touchstart',e=>{e.preventDefault();const t=e.touches[0];const[r,c]=getCR(t);painting=true;paintVal=G[r][c]?0:1;applyTool(r,c);},{passive:false});
+cv.addEventListener('touchmove',e=>{e.preventDefault();const t=e.touches[0];const[r,c]=getCR(t);applyTool(r,c);},{passive:false});
+cv.addEventListener('touchend',()=>{painting=false;});
+// Handle window resize for responsive canvas
+window.addEventListener('orientationchange',()=>{setTimeout(reset,100);});
+window.addEventListener('resize',()=>{clearTimeout(window.resizeTimer);window.resizeTimer=setTimeout(reset,300);});
+reset();
+</script>
+</body>
+</html>

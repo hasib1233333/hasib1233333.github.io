@@ -1,0 +1,12 @@
+Copyright (c) 2025 Md Hasibuzzaman. All Rights Reserved.
+
+This software and its source code are the exclusive property of
+Md Hasibuzzaman. No part of this codebase — including HTML, CSS,
+JavaScript, images, or any other content — may be copied, modified,
+distributed, sublicensed, or used in any form without the express
+written permission of the author.
+
+Unauthorized use, reproduction, or distribution is strictly prohibited
+and may result in legal action.
+
+Contact: hsbuzzaman@gmail.com
